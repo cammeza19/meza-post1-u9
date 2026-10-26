@@ -51,38 +51,38 @@ El microservicio se diseñó bajo una premisa fundamental de arquitectura de sof
 ```mermaid
 flowchart TD
     subgraph Config ["Capa de Configuracion / Composition Root"]
-        ClockCfg["ClockConfig\n(@Bean Clock)"]
-        UrgenteCfg["CanalUrgenteConfig\n(@Bean canalUrgente)"]
+        ClockCfg["ClockConfig (@Bean Clock)"]
+        UrgenteCfg["CanalUrgenteConfig (@Bean canalUrgente)"]
     end
 
     subgraph Service ["Capa de Servicio de Negocio"]
-        ServiceInt["<<interface>>\nCitaReminderService"]
-        ServiceImpl["CitaReminderServiceImpl\n(Orquestador de logica)"]
-        ServiceInt <|.. ServiceImpl
+        ServiceInt["Interfaz: CitaReminderService"]
+        ServiceImpl["CitaReminderServiceImpl (Orquestador)"]
+        ServiceImpl -.->|implementa| ServiceInt
     end
 
     subgraph Persistence ["Capa de Dominio y Persistencia"]
-        CitaEntity["Cita\n(@Entity citas)"]
-        EnumCanal["CanalNotificacion\n(EMAIL, SMS)"]
-        Repo["<<interface>>\nCitaRepository\n(JpaRepository)"]
-        H2DB[("H2 Database\n(En Memoria)")]
+        CitaEntity["Cita (@Entity)"]
+        EnumCanal["CanalNotificacion (EMAIL, SMS)"]
+        Repo["Interfaz: CitaRepository (JpaRepository)"]
+        H2DB[("H2 Database en memoria")]
         Repo --> H2DB
         CitaEntity --> EnumCanal
     end
 
-    subgraph Channel ["Capa de Canales (Strategy & Factory)"]
-        FactoryInt["<<interface>>\nReminderChannelFactory"]
+    subgraph Channel ["Capa de Canales: Strategy y Factory"]
+        FactoryInt["Interfaz: ReminderChannelFactory"]
         FactoryImpl["ReminderChannelFactoryImpl"]
-        ChannelInt["<<interface>>\nReminderChannel\n(Strategy)"]
+        ChannelInt["Interfaz Strategy: ReminderChannel"]
         EmailChan["EmailReminderChannel"]
         SmsChan["SmsReminderChannel"]
-        GatewayInt["<<interface>>\nNotificadorSmsGateway"]
+        GatewayInt["Interfaz Gateway: NotificadorSmsGateway"]
         TwilioGateway["TwilioNotificadorSmsGateway"]
 
-        FactoryInt <|.. FactoryImpl
-        ChannelInt <|.. EmailChan
-        ChannelInt <|.. SmsChan
-        GatewayInt <|.. TwilioGateway
+        FactoryImpl -.->|implementa| FactoryInt
+        EmailChan -.->|implementa| ChannelInt
+        SmsChan -.->|implementa| ChannelInt
+        TwilioGateway -.->|implementa| GatewayInt
         SmsChan --> GatewayInt
         FactoryImpl --> EmailChan
         FactoryImpl --> SmsChan
