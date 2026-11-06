@@ -2,159 +2,64 @@
 
 ![CI](https://github.com/cammeza19/meza-post1-u9/actions/workflows/ci.yml/badge.svg)
 
-Repositorio correspondiente a la actividad post-contenido de la Unidad 9 de Patrones de Diseño de Software (Sexto Semestre). Implementa un microservicio en Spring Boot para la orquestación y envío automatizado de recordatorios de citas médicas según la preferencia de canal del paciente (Correo Electrónico o SMS), fundamentado en los patrones **Strategy**, **Factory Method** y el **Principio de Inversión de Dependencias (DIP)**, respaldado por una suite integral de pruebas con **JUnit 5**, **Mockito**, **Test Doubles** especializados, **H2 Database**, análisis de cobertura con **JaCoCo** e Integración Continua con **GitHub Actions**.
+> Post-contenido Unidad 9 — Probar el Diseño: JUnit 5, Mockito, Test Doubles e Integración Continua  
+> Patrones de Diseño de Software · Ingeniería de Sistemas · Universidad de Santander (UDES) · Sexto semestre  
+> Autora: Camila Meza Palacio
 
----
+## Tabla de contenido
 
-## Tabla de Contenido
-
-1. [Descripcion del Proyecto](#descripcion-del-proyecto)
-2. [Arquitectura y Diagramas de Diseno](#arquitectura-y-diagramas-de-diseno)
-   - [Diagrama de Componentes y Capas](#diagrama-de-componentes-y-capas)
-   - [Diagrama de Secuencia del Flujo Principal](#diagrama-de-secuencia-del-flujo-principal)
-   - [Diagrama de Clases: Strategy y Factory Method](#diagrama-de-clases-strategy-y-factory-method)
-3. [Estructura del Proyecto](#estructura-del-proyecto)
-4. [Contratos Publicos del Sistema](#contratos-publicos-del-sistema)
-5. [Instrucciones de Ejecucion](#instrucciones-de-ejecucion)
-   - [Requisitos Previos](#requisitos-previos)
-   - [Ejecucion en Windows PowerShell](#ejecucion-en-windows-powershell)
-   - [Ejecucion en Linux o macOS Bash](#ejecucion-en-linux-o-macos-bash)
-6. [Decisiones de Diseno y ADRs](#decisiones-de-diseno-y-adrs)
-   - [Paso 5: Mock vs. Stub vs. Fake para Cada Colaborador](#paso-5-mock-vs-stub-vs-fake-para-cada-colaborador)
-   - [Por que Strategy Facilito las Pruebas](#por-que-strategy-facilito-las-pruebas)
-   - [Por que Factory Facilito las Pruebas](#por-que-factory-facilito-las-pruebas)
-   - [Diagnostico y Refactor DIP: Caso Canal Urgente](#diagnostico-y-refactor-dip-caso-canal-urgente)
-   - [H2 Real en Memoria vs. Gateway Mockeado en Integracion](#h2-real-en-memoria-vs-gateway-mockeado-en-integracion)
-   - [Pipeline de CI sin Contenedores de Base de Datos](#pipeline-de-ci-sin-contenedores-de-base-de-datos)
-7. [Matriz de Trade-offs](#matriz-de-trade-offs)
-8. [Suite de Pruebas Automatizadas y Cobertura](#suite-de-pruebas-automatizadas-y-cobertura)
-9. [Evidencia de Ejecucion](#evidencia-de-ejecucion)
+1. [Descripción](#descripción)
+2. [Arquitectura](#arquitectura)
+3. [Parte 1 — Aislamiento y pruebas unitarias](#parte-1--aislamiento-y-pruebas-unitarias)
+4. [Parte 2 — Refactor DIP, integración y CI/CD](#parte-2--refactor-dip-integración-y-cicd)
+5. [Decisiones de diseño](#decisiones-de-diseño)
+6. [Suite de pruebas](#suite-de-pruebas)
+7. [Ejecutar las pruebas](#ejecutar-las-pruebas)
+8. [Evidencias](#evidencias)
+9. [Herramientas utilizadas](#herramientas-utilizadas)
 10. [Conclusiones](#conclusiones)
 
----
+## Descripción
 
-## Descripcion del Proyecto
+Microservicio en Spring Boot 3.3.5 sobre Java 21 que detecta las citas médicas programadas dentro de las próximas 24 horas cuyo recordatorio aún no se ha enviado, y notifica a cada paciente por su canal preferido (`EMAIL` o `SMS`). Además expone un envío **urgente** por SMS para citas a menos de dos horas.
 
-El sistema resuelve la problemática de inasistencia a citas médicas mediante un servicio periódico que detecta citas programadas dentro de las próximas 24 horas que no han sido notificadas previamente, despachando el mensaje a través del canal predilecto del paciente (`EMAIL` o `SMS`).
+El servicio central, `CitaReminderServiceImpl`, nace diseñado con dos patrones del curso, ambos inyectados por constructor según el Principio de Inversión de Dependencias (DIP):
 
-El microservicio se diseñó bajo una premisa fundamental de arquitectura de software: **la testabilidad es una consecuencia directa del diseño desacoplado**. La aplicación se organiza en dos partes complementarias:
+| Patrón | Rol en el proyecto | Abstracción |
+|---|---|---|
+| **Strategy** (Unidad 4) | Cada canal de envío es una implementación intercambiable con la misma firma | `ReminderChannel` → `EmailReminderChannel`, `SmsReminderChannel` |
+| **Factory Method** (Unidad 2) | Selecciona en tiempo de ejecución la estrategia según `cita.getCanalPreferido()` | `ReminderChannelFactory` → `ReminderChannelFactoryImpl` |
+| **DIP / Composition Root** | Toda construcción de objetos concretos vive en `config/`, nunca en la lógica de negocio | `ClockConfig`, `CanalUrgenteConfig` |
 
-- **Parte 1 (Aislamiento y Test Doubles)**: Construcción de `CitaReminderServiceImpl` desacoplado mediante inyección por constructor de sus tres colaboradores (`CitaRepository`, `ReminderChannelFactory`, `Clock`). Se evalúa y justifica técnicamente el rol de cada Test Double (Mock vs. Stub vs. Fake), evitando mockeos frágiles y garantizando determinismo temporal mediante un Fake de `Clock`.
-- **Parte 2 (Integración, Refactor DIP y CI/CD)**: Incorporación de recordatorios urgentes para citas a menos de dos horas (`enviarRecordatorioUrgente`). Se analiza el problema de partida donde la dependencia concreta se construía con `new` dentro del método (imposibilitando la prueba de fallos de red o pasarela), y se aplica un refactor estricto hacia DIP trasladando la instanciación al Composition Root (`CanalUrgenteConfig`). Finalmente, se integran pruebas sobre persistencia H2 (`@DataJpaTest`), pruebas de contexto completo (`@SpringBootTest`) y un pipeline de Integración Continua automatizado con GitHub Actions.
-
----
-
-## Arquitectura y Diagramas de Diseno
-
-### Diagrama de Componentes y Capas
-
-```mermaid
-flowchart TD
-    subgraph Config ["Capa de Configuracion / Composition Root"]
-        ClockCfg["ClockConfig (@Bean Clock)"]
-        UrgenteCfg["CanalUrgenteConfig (@Bean canalUrgente)"]
-    end
-
-    subgraph Service ["Capa de Servicio de Negocio"]
-        ServiceInt["Interfaz: CitaReminderService"]
-        ServiceImpl["CitaReminderServiceImpl (Orquestador)"]
-        ServiceImpl -.->|implementa| ServiceInt
-    end
-
-    subgraph Persistence ["Capa de Dominio y Persistencia"]
-        CitaEntity["Cita (@Entity)"]
-        EnumCanal["CanalNotificacion (EMAIL, SMS)"]
-        Repo["Interfaz: CitaRepository (JpaRepository)"]
-        H2DB[("H2 Database en memoria")]
-        Repo --> H2DB
-        CitaEntity --> EnumCanal
-    end
-
-    subgraph Channel ["Capa de Canales: Strategy y Factory"]
-        FactoryInt["Interfaz: ReminderChannelFactory"]
-        FactoryImpl["ReminderChannelFactoryImpl"]
-        ChannelInt["Interfaz Strategy: ReminderChannel"]
-        EmailChan["EmailReminderChannel"]
-        SmsChan["SmsReminderChannel"]
-        GatewayInt["Interfaz Gateway: NotificadorSmsGateway"]
-        TwilioGateway["TwilioNotificadorSmsGateway"]
-
-        FactoryImpl -.->|implementa| FactoryInt
-        EmailChan -.->|implementa| ChannelInt
-        SmsChan -.->|implementa| ChannelInt
-        TwilioGateway -.->|implementa| GatewayInt
-        SmsChan --> GatewayInt
-        FactoryImpl --> EmailChan
-        FactoryImpl --> SmsChan
-    end
-
-    ClockCfg --> ServiceImpl
-    UrgenteCfg --> ServiceImpl
-    ServiceImpl --> Repo
-    ServiceImpl --> FactoryInt
-    ServiceImpl --> ChannelInt
-```
-
-### Diagrama de Secuencia del Flujo Principal
-
-Secuencia de ejecución para el método periódico `enviarRecordatoriosPendientes()`:
-
-```mermaid
-sequenceDiagram
-    autonumber
-    actor Scheduler as Planificador / Cliente
-    participant Service as CitaReminderServiceImpl
-    participant Clock as Clock (Fake / Real)
-    participant Repo as CitaRepository
-    participant Factory as ReminderChannelFactory
-    participant Channel as ReminderChannel (Strategy)
-
-    Scheduler->>Service: enviarRecordatoriosPendientes()
-    Service->>Clock: LocalDateTime.now(clock)
-    Clock-->>Service: ahora
-    Note over Service: Calcula ventana: [ahora, ahora + 24h]
-    Service->>Repo: findByFechaHoraCitaBetweenAndRecordatorioEnviadoFalse(ahora, en24Horas)
-    Repo-->>Service: List<Cita> citasPorNotificar
-
-    loop Por cada Cita pendiente
-        Service->>Factory: obtenerCanal(cita.getCanalPreferido())
-        Factory-->>Service: ReminderChannel (Email / Sms)
-        Service->>Channel: enviar(cita, mensaje)
-        Note over Channel: Despacha notificacion al paciente
-        Service->>Service: cita.setRecordatorioEnviado(true)
-        Service->>Repo: save(cita)
-        Repo-->>Service: Cita actualizada
-    end
-
-    Service-->>Scheduler: Total de citas notificadas (int)
-```
-
-### Diagrama de Clases: Strategy y Factory Method
+## Arquitectura
 
 ```mermaid
 classDiagram
-    class ReminderChannel {
+    direction TB
+
+    class CitaReminderService {
         <<interface>>
-        +enviar(Cita cita, String mensaje) void
+        +enviarRecordatoriosPendientes() int
+        +enviarRecordatorioUrgente(Long citaId) void
     }
 
-    class EmailReminderChannel {
-        +enviar(Cita cita, String mensaje) void
+    class CitaReminderServiceImpl {
+        -CitaRepository citaRepository
+        -ReminderChannelFactory reminderChannelFactory
+        -ReminderChannel canalUrgente
+        -Clock clock
     }
 
-    class SmsReminderChannel {
-        -NotificadorSmsGateway gateway
-        +SmsReminderChannel(NotificadorSmsGateway gateway)
-        +enviar(Cita cita, String mensaje) void
+    class ClockConfig {
+        +clock() Clock
     }
 
-    class NotificadorSmsGateway {
+    class CanalUrgenteConfig {
+        +canalUrgente(NotificadorSmsGateway) ReminderChannel
+    }
+
+    class CitaRepository {
         <<interface>>
-        +enviarSms(String numeroDestino, String texto) void
-    }
-
-    class TwilioNotificadorSmsGateway {
-        +enviarSms(String numeroDestino, String texto) void
     }
 
     class ReminderChannelFactory {
@@ -163,333 +68,298 @@ classDiagram
     }
 
     class ReminderChannelFactoryImpl {
-        -EmailReminderChannel emailReminderChannel
-        -SmsReminderChannel smsReminderChannel
-        +ReminderChannelFactoryImpl(EmailReminderChannel, SmsReminderChannel)
-        +obtenerCanal(CanalNotificacion tipo) ReminderChannel
     }
 
-    class CitaReminderServiceImpl {
-        -CitaRepository citaRepository
-        -ReminderChannelFactory reminderChannelFactory
-        -ReminderChannel canalUrgente
-        -Clock clock
-        +CitaReminderServiceImpl(...)
-        +enviarRecordatoriosPendientes() int
-        +enviarRecordatorioUrgente(Long citaId) void
+    class ReminderChannel {
+        <<interface>>
+        +enviar(Cita cita, String mensaje) void
     }
+
+    class EmailReminderChannel {
+    }
+
+    class SmsReminderChannel {
+    }
+
+    class NotificadorSmsGateway {
+        <<interface>>
+        +enviarSms(String numeroDestino, String texto) void
+    }
+
+    class TwilioNotificadorSmsGateway {
+    }
+
+    CitaReminderService <|.. CitaReminderServiceImpl
+    ClockConfig ..> CitaReminderServiceImpl : provee Clock
+    CitaReminderServiceImpl --> CitaRepository
+    CitaReminderServiceImpl --> ReminderChannelFactory
+    CitaReminderServiceImpl --> ReminderChannel : canalUrgente
+
+    ReminderChannelFactory <|.. ReminderChannelFactoryImpl
+    ReminderChannelFactoryImpl ..> EmailReminderChannel
+    ReminderChannelFactoryImpl ..> SmsReminderChannel
 
     ReminderChannel <|.. EmailReminderChannel
     ReminderChannel <|.. SmsReminderChannel
-    NotificadorSmsGateway <|.. TwilioNotificadorSmsGateway
+
+    CanalUrgenteConfig ..> SmsReminderChannel : new (único punto)
     SmsReminderChannel --> NotificadorSmsGateway
-    ReminderChannelFactory <|.. ReminderChannelFactoryImpl
-    ReminderChannelFactoryImpl --> EmailReminderChannel
-    ReminderChannelFactoryImpl --> SmsReminderChannel
-    CitaReminderServiceImpl --> ReminderChannelFactory
-    CitaReminderServiceImpl --> ReminderChannel
+    NotificadorSmsGateway <|.. TwilioNotificadorSmsGateway
 ```
 
----
-
-## Estructura del Proyecto
-
 ```
-meza-post1-u9/
-├── pom.xml                                     Definicion Maven, Spring Boot 3.3.5, Java 21, JaCoCo
-├── mvnw / mvnw.cmd                             Maven Wrapper para ejecucion portable sin instalacion previa
-├── .mvn/wrapper/maven-wrapper.properties       Propiedades del wrapper de Maven
-├── .gitignore                                  Exclusion de binarios, carpetas de IDEs y artefactos locales
-├── .gitattributes                              Normalizacion de fin de linea para entornos mixtos
-├── README.md                                   Documentacion arquitectonica, decisiones y evidencias
-├── .github/
-│   └── workflows/
-│       └── ci.yml                              Pipeline de GitHub Actions (build, verify, JaCoCo)
-├── docs/
-│   ├── guia-pruebas.md                         Guia de comandos y salidas esperadas de verificacion
-│   ├── adr/                                    Architecture Decision Records
-│   │   ├── 0001-seleccion-test-doubles-colaboradores.md
-│   │   ├── 0002-estrategia-canales-notificacion-strategy.md
-│   │   ├── 0003-seleccion-dinamica-canales-factory-method.md
-│   │   ├── 0004-refactorizacion-dip-canal-urgente.md
-│   │   ├── 0005-estrategia-pruebas-integracion-h2-gateway-mockeado.md
-│   │   └── 0006-pipeline-ci-sin-servicios-externos.md
-│   └── capturas/                               Evidencias graficas reales de ejecucion de terminal
-│       ├── 01-mvn-clean-compile.png
-│       ├── 02-mvn-test-unitarias.png
-│       ├── 03-mvn-test-integracion.png
-│       ├── 04-mvn-verify-total.png
-│       ├── 05-jacoco-coverage-report.png
-│       ├── 06-git-log-commits.png
-│       └── 07-github-actions-workflow.png
-└── src/
-    ├── main/
-    │   ├── java/com/clinica/recordatorios/
-    │   │   ├── RecordatoriosCitasServiceApplication.java   Punto de entrada Spring Boot
-    │   │   ├── domain/
-    │   │   │   ├── Cita.java                               Entidad JPA (@Table citas)
-    │   │   │   └── CanalNotificacion.java                  Enum de canales (EMAIL, SMS)
-    │   │   ├── repository/
-    │   │   │   └── CitaRepository.java                     JpaRepository con query derivada de ventana
-    │   │   ├── channel/
-    │   │   │   ├── ReminderChannel.java                    Interfaz Strategy
-    │   │   │   ├── EmailReminderChannel.java               Strategy concreta correo
-    │   │   │   ├── SmsReminderChannel.java                 Strategy concreta SMS (recibe gateway)
-    │   │   │   ├── ReminderChannelFactory.java             Interfaz Factory Method
-    │   │   │   ├── ReminderChannelFactoryImpl.java         Implementacion de Factory inyectada
-    │   │   │   └── gateway/
-    │   │   │       ├── NotificadorSmsGateway.java          Interfaz de pasarela SMS
-    │   │   │       └── TwilioNotificadorSmsGateway.java    Implementacion concreta pasarela SMS
-    │   │   ├── service/
-    │   │   │   ├── CitaReminderService.java                Interfaz pública del servicio
-    │   │   │   ├── CitaReminderServiceImpl.java            Implementacion desacoplada (DIP)
-    │   │   │   └── CitaNoEncontradaException.java          Excepcion de negocio (404/unchecked)
-    │   │   └── config/
-    │   │       ├── ClockConfig.java                        Composition root de Clock del sistema
-    │   │       └── CanalUrgenteConfig.java                 Composition root para canalUrgente (@Bean)
-    │   └── resources/
-    │       └── application.properties                      Configuracion H2 y sobreescritura de beans
-    └── test/
-        └── java/com/clinica/recordatorios/
-            ├── service/
-            │   └── CitaReminderServiceImplTest.java        Suite unitaria aislada (Mockito + Fake Clock)
-            ├── repository/
-            │   └── CitaRepositoryTest.java                 Suite persistencia H2 (@DataJpaTest)
-            └── CitaReminderServiceIntegrationTest.java     Suite contexto Spring completo (@SpringBootTest)
+src/main/java/com/clinica/recordatorios/
+├── RecordatoriosCitasServiceApplication.java
+├── domain/            Cita (@Entity, tabla "citas"), CanalNotificacion (EMAIL, SMS)
+├── repository/        CitaRepository (JpaRepository<Cita, Long>)
+├── channel/           ReminderChannel, EmailReminderChannel, SmsReminderChannel,
+│   │                  ReminderChannelFactory, ReminderChannelFactoryImpl
+│   └── gateway/       NotificadorSmsGateway, TwilioNotificadorSmsGateway
+├── service/           CitaReminderService, CitaReminderServiceImpl, CitaNoEncontradaException
+└── config/            ClockConfig, CanalUrgenteConfig  ← composition root
+
+src/test/java/com/clinica/recordatorios/
+├── service/           CitaReminderServiceImplTest (unitarias, Mockito)
+├── repository/        CitaRepositoryTest (@DataJpaTest + H2)
+└──                    CitaReminderServiceIntegrationTest (@SpringBootTest + H2 + @MockBean)
 ```
 
----
+Los paquetes de prueba replican la estructura de producción: cada clase de prueba vive en el mismo paquete que la clase que verifica.
 
-## Contratos Publicos del Sistema
+## Parte 1 — Aislamiento y pruebas unitarias
 
-| Tipo de Componente | Interfaz / Clase | Metodo Publico | Parametros | Retorno | Comportamiento / Regla |
-|---|---|---|---|---|---|
-| **Servicio** | `CitaReminderService` | `enviarRecordatoriosPendientes()` | Ninguno | `int` | Consulta citas entre `ahora` y `ahora + 24h` con `recordatorioEnviado = false`, resuelve el canal, envía mensaje, marca `enviado = true`, guarda y retorna el total de citas procesadas. |
-| **Servicio** | `CitaReminderService` | `enviarRecordatorioUrgente(Long citaId)` | `Long citaId` | `void` | Busca cita por id; si no existe lanza `CitaNoEncontradaException`. Despacha mensaje urgente por `canalUrgente`, actualiza estado a enviado y persiste en base de datos. |
-| **Fábrica** | `ReminderChannelFactory` | `obtenerCanal(CanalNotificacion tipo)` | `CanalNotificacion` | `ReminderChannel` | Retorna la estrategia `EmailReminderChannel` si `EMAIL`, o `SmsReminderChannel` si `SMS`. |
-| **Estrategia** | `ReminderChannel` | `enviar(Cita cita, String mensaje)` | `Cita cita, String mensaje` | `void` | Envía la notificación al contacto del paciente según el medio subyacente. |
-| **Pasarela** | `NotificadorSmsGateway` | `enviarSms(String numero, String texto)` | `String, String` | `void` | Realiza el despacho físico del mensaje hacia la red de telefonía celular. |
-| **Repositorio** | `CitaRepository` | `findByFechaHoraCitaBetween...` | `LocalDateTime desde, LocalDateTime hasta` | `List<Cita>` | Consulta entidades en el rango temporal con filtro de no enviadas. |
+`CitaReminderServiceImplTest` aísla por completo `CitaReminderServiceImpl` de sus colaboradores. El servicio se construye manualmente en `@BeforeEach` con:
 
----
+- `@Mock CitaRepository` — controla la consulta y verifica cada `save(...)`.
+- `@Mock ReminderChannelFactory` + `@Mock ReminderChannel` — verifican que se seleccionó y usó la estrategia correcta.
+- `Clock.fixed(Instant.parse("2026-08-10T09:00:00Z"), ZoneId.of("UTC"))` — Fake del JDK, no un mock.
 
-## Instrucciones de Ejecucion
+Gracias a Strategy y Factory, la prueba nunca toca SMTP, HTTP ni base de datos: verifica únicamente la **orquestación** del servicio. Con el reloj congelado, un `ArgumentCaptor` comprueba los límites exactos de la ventana consultada: `desde = 2026-08-10T09:00` y `hasta = 2026-08-11T09:00`.
 
-### Requisitos Previos
+## Parte 2 — Refactor DIP, integración y CI/CD
 
-- **Java Development Kit (JDK)**: Versión 21 LTS instalada en el sistema.
-- **Git**: Versión 2.30 o superior instalada y configurada en terminal.
+1. **Problema.** `enviarRecordatorioUrgente(Long citaId)` se agregó primero construyendo su canal con `new SmsReminderChannel(new TwilioNotificadorSmsGateway())` dentro del método (commit `1c8216c`). Funcionaba, pero no se podía probar el fallo del gateway.
+2. **Refactor.** La construcción se movió al composition root `config/CanalUrgenteConfig.java` como `@Bean canalUrgente`, y el servicio recibe `@Qualifier("canalUrgente") ReminderChannel` por constructor (commit `3d7705a`).
+3. **Pruebas habilitadas.** Tres pruebas unitarias nuevas, entre ellas `enviarRecordatorioUrgente_gatewayFalla_noMarcaComoEnviado`, que antes del refactor era imposible de escribir (commit `69710a2`).
+4. **Integración con H2.** `CitaRepositoryTest` (`@DataJpaTest`) valida la consulta derivada contra una base real en memoria; `CitaReminderServiceIntegrationTest` (`@SpringBootTest`) ejecuta el flujo completo con un Clock fijo `@Primary` y `@MockBean NotificadorSmsGateway`.
+5. **CI.** `.github/workflows/ci.yml` ejecuta `mvn -B verify --no-transfer-progress` sobre `ubuntu-latest` con JDK 21 Temurin en cada `push` y `pull_request` a `main`.
 
-### Ejecucion en Windows PowerShell
+## Decisiones de diseño
 
-```powershell
-# 1. Configurar JAVA_HOME a JDK 21
-$env:JAVA_HOME = "C:\Program Files\Java\jdk-21"
+> Las decisiones se amplían en los ADR de `docs/adr/`.
 
-# 2. Compilar el proyecto y verificar que no existan errores de sintaxis
-.\mvnw.cmd clean compile
+### 1. Por qué Strategy facilitó las pruebas
 
-# 3. Ejecutar exclusivamente la suite de pruebas unitarias (Parte 1 y 2)
-.\mvnw.cmd test -Dtest=CitaReminderServiceImplTest
+Sin la interfaz `ReminderChannel`, la lógica de transporte (cliente SMTP para correo, cliente HTTP con credenciales para SMS) estaría escrita dentro del servicio. Probar la selección de canal obligaría a mockear librerías de bajo nivel de terceros, cuyas APIs no controlamos y que cambian entre versiones.
 
-# 4. Ejecutar la suite completa (unitarias + integracion H2 + contexto Spring + JaCoCo)
-.\mvnw.cmd verify
+Con Strategy, todos los canales comparten la firma `enviar(Cita, String)`. Por eso **un único `@Mock ReminderChannel` basta para verificar cualquier canal**, el actual o uno futuro (WhatsApp, push), sin modificar la prueba:
 
-# 5. Iniciar la aplicacion Spring Boot en el puerto 8080 (opcional)
-.\mvnw.cmd spring-boot:run
+```java
+verify(reminderChannelMock, times(1)).enviar(eq(cita), anyString());
 ```
 
-### Ejecucion en Linux o macOS Bash
+La prueba `enviarRecordatoriosPendientes_citaEnVentana_usaElCanalPreferido` depende directamente de esta abstracción.
+
+### 2. Por qué Factory Method facilitó las pruebas
+
+Sin `ReminderChannelFactory`, el servicio tendría un `switch` / `if-else` embebido para elegir el canal. Esa decisión sería **interna y no observable**: solo podría comprobarse de forma indirecta, revisando qué se imprimió o qué se envió realmente.
+
+Con la Factory inyectada, la selección se vuelve una **interacción explícita y verificable**:
+
+```java
+when(reminderChannelFactory.obtenerCanal(CanalNotificacion.EMAIL)).thenReturn(reminderChannelMock);
+// ...
+verify(reminderChannelFactory).obtenerCanal(CanalNotificacion.EMAIL);
+```
+
+También permite afirmar lo contrario: en `enviarRecordatoriosPendientes_sinCitasPendientes_noConsultaLaFactory`, `verifyNoInteractions(reminderChannelFactory)` demuestra que el servicio no resuelve canales cuando no hay citas por notificar.
+
+### 3. Matriz de Test Doubles (Mock vs. Stub vs. Fake)
+
+La decisión se tomó con una pregunta guía: *¿existe una implementación real y completa en la librería estándar que se comporte igual que en producción?* Si existe, se usa un Fake. Si no, la elección entre Stub y Mock depende de si la prueba solo necesita controlar respuestas o también verificar interacciones.
+
+| Colaborador | Double elegido | ¿Controla respuestas? | ¿Verifica interacciones? | Justificación |
+|---|---|---|---|---|
+| `CitaRepository` | **Mock** (`@Mock`) | **Sí**: `findBy…` devuelve la lista preparada | **Sí**: `save(cita)` exactamente una vez; `never().save(...)` en los fallos; captura de argumentos de la ventana | Un Stub solo devolvería la lista. La regla de negocio exige comprobar que la cita se persiste marcada como enviada y que no se persiste cuando el envío falla. Necesita las dos cosas, así que es un Mock. |
+| `ReminderChannelFactory` | **Mock** (`@Mock`) | **Sí**: devuelve el canal simulado | **Sí**: `obtenerCanal(EMAIL)` y `verifyNoInteractions` | El comportamiento bajo prueba es la selección de la estrategia. Eso solo se observa verificando la interacción, no con un valor de retorno. |
+| `ReminderChannel` (por canal y `canalUrgente`) | **Mock** (`@Mock`) | En el fallo: `doThrow(...)` | **Sí**: `enviar(eq(cita), contains("URGENTE"))` | `enviar` devuelve `void`: la única forma de comprobar el despacho es verificar la llamada. Además, `doThrow` simula el fallo del gateway sin red. |
+| `Clock` | **Fake** (`Clock.fixed(...)`) | Implícitamente: instante congelado | No aplica | `Clock.fixed` es una implementación real y completa del JDK. Se comporta igual que el reloj de producción, solo que no avanza. |
+
+**Por qué no se mockea `Clock` con Mockito.** `LocalDateTime.now(clock)` no llama a un único método: consulta `clock.instant()` y `clock.getZone()` y los combina. Un `mock(Clock.class)` exigiría stubbear ambos por separado. Si falta uno, devuelve `null` y la prueba falla con un `NullPointerException` sin relación con la lógica. Además, se estaría acoplando la prueba a detalles internos de `java.time`. `Clock.fixed(...)` es más simple, más legible y fiel al comportamiento real. Gracias a él, la prueba `enviarRecordatoriosPendientes_ventanaDeterministaSegunClockFijo_consultaLosLimitesExactos` es reproducible en cualquier máquina, zona horaria y hora del día. Con `Clock.systemDefaultZone()` sería imposible asertar valores exactos.
+
+### 4. Diagnóstico y refactor DIP de `enviarRecordatorioUrgente`
+
+#### Antes (Paso 7, commit `1c8216c`): viola DIP
+
+```java
+@Override
+public void enviarRecordatorioUrgente(Long citaId) {
+    Cita cita = citaRepository.findById(citaId)
+            .orElseThrow(() -> new CitaNoEncontradaException(citaId));
+
+    ReminderChannel canalUrgente = new SmsReminderChannel(new TwilioNotificadorSmsGateway()); // ← línea responsable
+    canalUrgente.enviar(cita, "URGENTE: su cita es en menos de 2 horas y no ha sido confirmada");
+
+    cita.setRecordatorioEnviado(true);
+    citaRepository.save(cita);
+}
+```
+
+**Diagnóstico.** El módulo de alto nivel (el servicio) depende directamente de dos clases concretas de bajo nivel, `SmsReminderChannel` y `TwilioNotificadorSmsGateway`, que construye él mismo con `new` dentro del cuerpo del método. Como el objeto nace y muere dentro del método, Mockito no tiene ningún punto de sustitución. Por eso el escenario "el gateway de SMS falla, así que la cita no debe marcarse como enviada" no se puede probar: cada ejecución usa el gateway real.
+
+`enviarRecordatoriosPendientes()` sí era testeable desde la Parte 1 porque obtiene su canal de una abstracción inyectada (`ReminderChannelFactory`). La diferencia entre ambos métodos no está en la lógica, sino en **quién construye la dependencia**.
+
+`Mockito.mockConstruction()` podría interceptar ese `new` (mock maker inline, Mockito 5), pero solo ocultaría el síntoma. El problema es de diseño y se corrige con DIP, no con una API de pruebas más avanzada.
+
+#### Después (Paso 8, commit `3d7705a`): DIP aplicado
+
+```java
+// config/CanalUrgenteConfig.java — composition root: el único "new" de este canal
+@Configuration
+public class CanalUrgenteConfig {
+    @Bean
+    public ReminderChannel canalUrgente(NotificadorSmsGateway gateway) {
+        return new SmsReminderChannel(gateway);
+    }
+}
+
+// service/CitaReminderServiceImpl.java — depende solo de la abstracción
+public CitaReminderServiceImpl(CitaRepository citaRepository,
+                               ReminderChannelFactory reminderChannelFactory,
+                               @Qualifier("canalUrgente") ReminderChannel canalUrgente,
+                               Clock clock) { ... }
+
+@Override
+public void enviarRecordatorioUrgente(Long citaId) {
+    Cita cita = citaRepository.findById(citaId)
+            .orElseThrow(() -> new CitaNoEncontradaException(citaId));
+
+    canalUrgente.enviar(cita, "URGENTE: su cita es en menos de 2 horas y no ha sido confirmada");
+    cita.setRecordatorioEnviado(true);
+    citaRepository.save(cita);
+}
+```
+
+| Aspecto | Antes (Paso 7) | Después (Paso 8) |
+|---|---|---|
+| ¿Quién construye el canal? | El propio método, con `new` | Spring, en `CanalUrgenteConfig` |
+| Dependencia del servicio | Clases concretas `SmsReminderChannel` + `TwilioNotificadorSmsGateway` | Interfaz `ReminderChannel` |
+| Punto de sustitución en pruebas | Ninguno | Parámetro del constructor |
+| ¿Testeable el fallo del gateway? | No | Sí, con `doThrow(...).when(canalUrgenteMock).enviar(...)` |
+| Comportamiento externo | — | Idéntico (refactor puro) |
+
+La prueba `enviarRecordatorioUrgente_gatewayFalla_noMarcaComoEnviado` demuestra que la testabilidad es consecuencia directa de aplicar DIP. Simula la excepción en el canal inyectado y comprueba que la cita no se marca como enviada ni se persiste (`verify(citaRepository, never()).save(any())`). El `new CitaNoEncontradaException(...)` que permanece en el servicio no viola DIP: es un objeto de valor que señala un error, no un colaborador con comportamiento que deba sustituirse.
+
+### 5. Por qué H2 real, pero gateway SMS mockeado, en integración
+
+En `CitaReminderServiceIntegrationTest` conviven una base de datos real (H2 en memoria) y un `@MockBean NotificadorSmsGateway`. No es inconsistente:
+
+- **H2 es un Fake aceptable.** Implementa el mismo contrato SQL/JPA que la base de producción, se levanta en milisegundos dentro de la JVM y no requiere infraestructura. Así se prueban de verdad el mapeo de `Cita`, la consulta derivada `findByFechaHoraCitaBetweenAndRecordatorioEnviadoFalse` y la persistencia de `recordatorioEnviado = true`.
+- **El gateway SMS se mockea.** Un proveedor de terceros no tiene un "H2 equivalente" gratuito y determinista. Llamarlo en cada ejecución implicaría credenciales, red, costo por mensaje y dependencia de su disponibilidad. Con `@MockBean` se reemplaza solo ese bean en el contexto de Spring; el resto del grafo (servicio → factory → `SmsReminderChannel`) es real. Así se verifica que el flujo completo llega hasta el borde del sistema: `verify(notificadorSmsGateway, times(1)).enviarSms(anyString(), anyString())`.
+
+El criterio es el mismo de la Parte 1: se usa un Fake cuando existe una implementación fiel y barata, y un Mock en la frontera con sistemas externos que no controlamos.
+
+**Nota sobre el Clock de integración.** `ClockDeterministaConfig` (`@TestConfiguration`) declara un bean `clock` con el mismo nombre que el de `ClockConfig`. Por eso la propiedad se habilita solo en la prueba, mediante `@SpringBootTest(properties = "spring.main.allow-bean-definition-overriding=true")`, y no en la configuración de producción: el reloj fijo reemplaza al del sistema solo en el contexto de prueba, y la ventana de 24 horas resulta determinista.
+
+### 6. Por qué no se usó contenedor de base de datos en CI
+
+El workflow no tiene bloque `services:` (por ejemplo, PostgreSQL) ni depende de Docker. Esto es posible porque todas las pruebas de persistencia usan H2 en memoria, que se descarga como dependencia Maven y arranca dentro de la misma JVM que ejecuta las pruebas. Si se hubiera probado contra PostgreSQL con Testcontainers, el pipeline necesitaría un runner con Docker, tiempos de arranque mayores y gestión de puertos. La elección de H2 en la Parte 2 simplifica directamente el `ci.yml` a tres pasos: checkout, JDK 21 con caché Maven y `mvn -B verify`.
+
+El costo aceptado es que no se validan particularidades de SQL propietario del motor de producción. Para este proyecto no es relevante, porque la única consulta es una derivada estándar de Spring Data.
+
+## Suite de pruebas
+
+| # | Clase | Prueba | Qué demuestra |
+|---|---|---|---|
+| 1 | `CitaReminderServiceImplTest` | `enviarRecordatoriosPendientes_citaEnVentana_usaElCanalPreferido` | Strategy + Factory: se pide el canal EMAIL, se envía, se marca y se guarda una vez |
+| 2 | `CitaReminderServiceImplTest` | `enviarRecordatoriosPendientes_ventanaDeterministaSegunClockFijo_consultaLosLimitesExactos` | Fake Clock + `ArgumentCaptor`: ventana exacta [09:00, 09:00 + 24 h] |
+| 3 | `CitaReminderServiceImplTest` | `enviarRecordatoriosPendientes_sinCitasPendientes_noConsultaLaFactory` | Sin citas no hay interacción con la Factory ni save |
+| 4 | `CitaReminderServiceImplTest` | `enviarRecordatorioUrgente_citaExistente_usaCanalUrgenteInyectado` | El canal inyectado recibe un mensaje con "URGENTE" |
+| 5 | `CitaReminderServiceImplTest` | `enviarRecordatorioUrgente_gatewayFalla_noMarcaComoEnviado` | Escenario habilitado por el refactor DIP: el fallo se propaga y no se persiste |
+| 6 | `CitaReminderServiceImplTest` | `enviarRecordatorioUrgente_citaInexistente_lanzaCitaNoEncontradaException` | Excepción de negocio y cero interacción con el canal |
+| 7 | `CitaRepositoryTest` | `findByFechaHoraCitaBetweenAndRecordatorioEnviadoFalse_soloRetornaCitasPendientesEnVentana` | `@DataJpaTest` + H2: excluye citas ya enviadas y fuera de ventana |
+| 8 | `CitaReminderServiceIntegrationTest` | `enviarRecordatoriosPendientes_contextoCompletoDeSpring_persisteYNotificaCitasEnVentana` | `@SpringBootTest`: contexto real + Clock fijo `@Primary` + `@MockBean` gateway |
+
+Todos los nombres siguen la convención `metodoBajoPrueba_condicion_resultadoEsperado`.
+
+### Cobertura JaCoCo (`target/site/jacoco/index.html`):
+
+| Paquete | Instrucciones | Ramas |
+|---|---|---|
+| `service` | 100 % (101/101) | 100 % (2/2) |
+| `domain` | 100 % | n/a |
+| `config` | 84 % | n/a |
+| `channel` | 63 % | 50 % |
+| `channel.gateway` | 0 % (sustituido por `@MockBean` de forma deliberada) | n/a |
+| **Total** | **78 %** | **75 %** |
+
+La lógica de negocio (`CitaReminderServiceImpl`) está cubierta al 100 %. `TwilioNotificadorSmsGateway` queda sin cubrir a propósito, porque nunca se invoca el proveedor real en pruebas.
+
+## Ejecutar las pruebas
+
+Requisitos: JDK 21 y Maven 3.9+ (o el wrapper `mvnw` incluido).
 
 ```bash
-# 1. Asegurar permisos de ejecucion para el wrapper
-chmod +x mvnw
-
-# 2. Compilar el proyecto
-./mvnw clean compile
-
-# 3. Ejecutar pruebas unitarias
-./mvnw test -Dtest=CitaReminderServiceImplTest
-
-# 4. Ejecutar todas las pruebas y generar reporte JaCoCo
-./mvnw verify
-
-# 5. Iniciar la aplicacion Spring Boot
-./mvnw spring-boot:run
+mvn test       # compila y ejecuta TODAS las clases *Test con Surefire (unitarias + @DataJpaTest + @SpringBootTest)
+mvn verify     # todo lo anterior + empaquetado del JAR + reporte JaCoCo en target/site/jacoco/index.html
 ```
 
----
+- `mvn test` recorre el ciclo de vida hasta la fase `test`. Como las tres clases terminan en `Test`, Surefire ejecuta las 8 pruebas, incluidas las de integración con H2.
+- `mvn verify` continúa por `package` y `verify`. En `verify` se ejecuta el goal `jacoco:report` configurado en el `pom.xml`. Es el mismo comando que corre el pipeline de CI, así que un `verify` en verde en local anticipa un badge en verde.
 
-## Decisiones de Diseno y ADRs
+Para ejecutar solo una clase:
 
-### Paso 5: Mock vs. Stub vs. Fake para Cada Colaborador
-*(Referencia completa en [ADR 0001](docs/adr/0001-seleccion-test-doubles-colaboradores.md))*
-
-En `CitaReminderServiceImplTest` se evaluaron rigurosamente los colaboradores inyectados:
-
-- **`CitaRepository` -> Mock**: No es un simple Stub. Un Stub únicamente aportaría una lista preconfigurada de citas para la lectura inicial. Sin embargo, el requisito central del negocio exige **verificar que `save(cita)` sea llamado exactamente una vez por cita**, y que dicha entidad viaje con su bandera `recordatorioEnviado = true`. Cuando una prueba necesita controlar entradas y simultáneamente auditar salidas y efectos colaterales de interacción, la figura formal es un **Mock**.
-- **`ReminderChannelFactory` y `ReminderChannel` -> Mock**: La responsabilidad bajo prueba es comprobar que el servicio efectivamente solicitó a la fábrica el canal `EMAIL` o `SMS` requerido por el paciente, y que el canal resultante recibió la llamada `enviar(cita, mensaje)`. Dado que `enviar()` retorna `void`, la única forma de validar su despacho es mediante inspección de comportamiento con `verify()`.
-- **`Clock` -> Fake (deliberadamente NO mockeado con Mockito)**: Mockear `java.time.Clock` mediante Mockito obligaría a stubbear artificialmente `clock.instant()` y `clock.getZone()`, corriendo el riesgo de que métodos derivados de alto nivel (`LocalDateTime.now(clock)`) presenten comportamientos erráticos. `Clock.fixed(Instant, ZoneId)` es una implementación concreta, inmutable y determinista provista por el propio JDK: es un **Fake genuino** que otorga 100% de reproducibilidad temporal sin la fragilidad de un mock dinámico.
-
-### Por que Strategy Facilito las Pruebas
-*(Referencia completa en [ADR 0002](docs/adr/0002-estrategia-canales-notificacion-strategy.md))*
-
-Sin la abstracción `ReminderChannel`, la lógica técnica de conexión (como clientes SMTP para correo o llamadas HTTP con headers y tokens para SMS) estaría hardcodeada en bloques monolíticos dentro de `CitaReminderServiceImpl`. Probar el servicio requeriría simular librerías externas de bajo nivel de transporte. Al aplicar **Strategy**, un único `@Mock ReminderChannel` permite verificar cualquier canal con la misma firma `enviar(Cita, String)`, aislando por completo la lógica de negocio del transporte físico.
-
-### Por que Factory Facilito las Pruebas
-*(Referencia completa en [ADR 0003](docs/adr/0003-seleccion-dinamica-canales-factory-method.md))*
-
-Sin `ReminderChannelFactory`, el servicio contendría un `switch` o `if/else` interno construyendo o seleccionando los canales. Esa decisión interna sería opaca y no observable de forma directa en las pruebas unitarias. Con la fábrica inyectada por constructor, la resolución de estrategia se convierte en un evento explícito y auditable mediante Mockito: `verify(reminderChannelFactory).obtenerCanal(CanalNotificacion.EMAIL)`.
-
-### Diagnostico y Refactor DIP: Caso Canal Urgente
-*(Referencia completa en [ADR 0004](docs/adr/0004-refactorizacion-dip-canal-urgente.md))*
-
-#### Diagnóstico del problema antes del refactor
-Al introducir la funcionalidad `enviarRecordatorioUrgente(Long citaId)`, la versión de partida contenía:
-```java
-// Código previo al refactor (Paso 7) — Viola DIP
-ReminderChannel canalUrgente = new SmsReminderChannel(new TwilioNotificadorSmsGateway());
-canalUrgente.enviar(cita, "URGENTE: su cita es en menos de 2 horas y no ha sido confirmada");
-cita.setRecordatorioEnviado(true);
-citaRepository.save(cita);
-```
-**Causa del bloqueo de pruebas**: La línea `new SmsReminderChannel(new TwilioNotificadorSmsGateway())` instancia directamente clases concretas en el cuerpo del método. Como resultado, era imposible escribir la prueba unitaria:
-`enviarRecordatorioUrgente_gatewayFalla_noMarcaComoEnviado()`
-Si la pasarela fallaba, no existía punto de inyección para simular dicha falla con un mock; la prueba habría intentado conectarse a la pasarela real o habría requerido trucos invasivos de instrumentación de bytecode (`Mockito.mockConstruction()`), los cuales representan un parche a un problema de arquitectura.
-
-#### Solución aplicada mediante el refactor (Paso 8)
-Se extrajo la construcción hacia el **Composition Root** de Spring en `CanalUrgenteConfig`:
-
-```diff
---- Codigo con new hardcodeado (Paso 7)
-+++ Codigo refactorizado con DIP (Paso 8)
-@@ -1,6 +1,11 @@
-+@Configuration
-+public class CanalUrgenteConfig {
-+    @Bean
-+    public ReminderChannel canalUrgente(NotificadorSmsGateway gateway) {
-+        return new SmsReminderChannel(gateway);
-+    }
-+}
-+
- @Service
- public class CitaReminderServiceImpl implements CitaReminderService {
--    public CitaReminderServiceImpl(CitaRepository repo, ReminderChannelFactory factory, Clock clock)
-+    public CitaReminderServiceImpl(CitaRepository repo, ReminderChannelFactory factory, 
-+                                   @Qualifier("canalUrgente") ReminderChannel canalUrgente, Clock clock) {
-+        this.canalUrgente = canalUrgente;
-+    }
-@@ -10,2 +15,2 @@
-     public void enviarRecordatorioUrgente(Long citaId) {
-         Cita cita = citaRepository.findById(citaId).orElseThrow(...);
--        ReminderChannel canalUrgente = new SmsReminderChannel(new TwilioNotificadorSmsGateway());
-         canalUrgente.enviar(cita, "URGENTE...");
-         cita.setRecordatorioEnviado(true);
-         citaRepository.save(cita);
-     }
+```bash
+mvn test -Dtest=CitaReminderServiceImplTest   # solo las 6 pruebas unitarias con Mockito
+mvn test -Dtest=CitaRepositoryTest            # solo la capa de persistencia
 ```
 
-Gracias a este refactor, `CitaReminderServiceImplTest` puede inyectar un `@Mock private ReminderChannel canalUrgenteMock`, simulando una excepción con `doThrow(...)` y validando de manera contundente que `verify(citaRepository, never()).save(any())` se cumple.
+En Windows se puede usar `.\mvnw.cmd` y en Linux/macOS `./mvnw` en lugar de `mvn`. Hay más detalle en `docs/guia-pruebas.md`.
 
-### H2 Real en Memoria vs. Gateway Mockeado en Integracion
-*(Referencia completa en [ADR 0005](docs/adr/0005-estrategia-pruebas-integracion-h2-gateway-mockeado.md))*
+## Evidencias
 
-En `CitaReminderServiceIntegrationTest` conviven una base H2 real y un `@MockBean NotificadorSmsGateway`. No existe contradicción metodológica: H2 es un Fake fiel y estandarizado del motor relacional que no exige infraestructura externa; en contraste, los proveedores SMS comerciales no tienen un equivalente local en memoria gratuito, por lo que mockear la pasarela evita costos, llamadas de red y fragilidad externa en CI.
+### Pruebas unitarias en verde — `mvn test -Dtest=CitaReminderServiceImplTest`
+![Pruebas unitarias en verde](docs/capturas/02-mvn-test-unitarias.png)
 
-### Pipeline de CI sin Contenedores de Base de Datos
-*(Referencia completa en [ADR 0006](docs/adr/0006-pipeline-ci-sin-servicios-externos.md))*
+### Pruebas de integración en verde — `@DataJpaTest` y `@SpringBootTest`
+![Pruebas de integración en verde](docs/capturas/03-mvn-test-integracion.png)
 
-El archivo `.github/workflows/ci.yml` prescinde del bloque `services: postgres`. Al utilizar H2 en memoria para las pruebas de persistencia y contexto de Spring, el agente de CI en GitHub Actions no requiere inicializar daemons de Docker ni gestionar latencias de red, completando la verificación en segundos de forma 100% determinista.
+### Suite completa — `mvn verify` (8 pruebas, BUILD SUCCESS)
+![mvn verify](docs/capturas/04-mvn-verify-total.png)
 
----
-
-## Matriz de Trade-offs
-
-| Decision de Diseno | Alternativa Descartada | Beneficios Obtenidos | Que se Sacrifico |
-|---|---|---|---|
-| **Inyección por constructor en `CitaReminderServiceImpl`** | Instanciación con `new` dentro de los métodos | Total testabilidad en aislamiento; inmutabilidad (`final`); cumplimiento estricto de DIP. | Se requiere registrar beans explícitos en `@Configuration` y mayor número de parámetros en constructor. |
-| **`Clock.fixed(...)` como Fake** | `@Mock Clock` de Mockito o `Clock.systemDefaultZone()` | Pruebas deterministas con reproducibilidad temporal total; código simple y fiel al runtime de Java. | No se evalúa el cambio dinámico continuo de hora en la misma prueba (intencional para reproducibilidad). |
-| **Patrón Strategy para canales** | `switch` con librerías SMTP/HTTP en el servicio | Nuevos canales sin tocar el servicio (OCP); pruebas unitarias con un simple mock de canal. | Mayor cantidad de clases e interfaces en el paquete `channel/`. |
-| **Patrón Factory Method para selección** | Instanciación directa en condicionales | La decisión de selección de canal se vuelve observable y verificable explícitamente en tests. | Indirección adicional entre el orquestador y la estrategia concreta. |
-| **H2 en memoria para integración** | Contenedores Docker reales (PostgreSQL / Testcontainers) | Rapidez de ejecución en CI (menos de 30 segundos); sin dependencias de Docker ni puertos ocupados. | No se prueban peculiaridades de sintaxis propietaria específicas de motores de producción. |
-
----
-
-## Suite de Pruebas Automatizadas y Cobertura
-
-La suite completa consta de **8 pruebas automatizadas** que se ejecutan en verde:
-
-```
-[INFO] -------------------------------------------------------
-[INFO]  T E S T S
-[INFO] -------------------------------------------------------
-[INFO] Running com.clinica.recordatorios.service.CitaReminderServiceImplTest
-[INFO] Tests run: 6, Failures: 0, Errors: 0, Skipped: 0
-[INFO] Running com.clinica.recordatorios.repository.CitaRepositoryTest
-[INFO] Tests run: 1, Failures: 0, Errors: 0, Skipped: 0
-[INFO] Running com.clinica.recordatorios.CitaReminderServiceIntegrationTest
-[INFO] Tests run: 1, Failures: 0, Errors: 0, Skipped: 0
-[INFO] 
-[INFO] Results:
-[INFO] Tests run: 8, Failures: 0, Errors: 0, Skipped: 0
-[INFO] BUILD SUCCESS
-```
-
-### Métricas de Cobertura JaCoCo (100% en Lógica de Negocio)
-
-Al ejecutar `mvn verify`, JaCoCo evalúa el bytecode y emite el reporte interactivo en `target/site/jacoco/index.html`:
-
-| Paquete Analizado | Instrucciones Totales | Instrucciones Cubiertas | Cobertura Instrucciones | Ramas Cubiertas | Cobertura Ramas |
-|---|---|---|---|---|---|
-| `com.clinica.recordatorios.service` | 101 | 101 | **100%** | 2 / 2 | **100%** |
-| `com.clinica.recordatorios.domain` | 15 | 15 | **100%** | 0 / 0 | n/a |
-| `com.clinica.recordatorios.config` | 13 | 11 | **84%** | 0 / 0 | n/a |
-| `com.clinica.recordatorios.channel` | 52 | 33 | **63%** | 1 / 2 | **50%** |
-| `com.clinica.recordatorios` | 8 | 3 | **37%** | 0 / 0 | n/a |
-| `com.clinica.recordatorios.channel.gateway` | 18 | 0 | **0%** (Mockeado en tests) | 0 / 0 | n/a |
-| **Total del Proyecto** | **207** | **163** | **78%** | **3 / 4** | **75%** |
-
-*(Nota: Las pasarelas de infraestructura real se encuentran mockeadas deliberadamente en pruebas, concentrando el 100% de la cobertura en la lógica del servicio).*
-
----
-
-## Evidencia de Ejecucion
-
-Las siguientes capturas corresponden a ejecuciones directas realizadas sobre la terminal local del proyecto:
-
-### 1. Compilación Limpia del Proyecto (`mvn clean compile`)
-Demuestra que la configuración de Maven, dependencias de Spring Boot 3.3.5, Java 21 y Lombok compilan sin advertencias ni errores.
-![Compilación limpia](docs/capturas/01-mvn-clean-compile.png)
-
-### 2. Pruebas Unitarias Aisladas (`mvn test -Dtest=CitaReminderServiceImplTest`)
-Demuestra la ejecución exitosa de los 6 casos de prueba unitarios con Mockito y Fake Clock, incluyendo casos exitosos y manejo de excepciones.
-![Pruebas unitarias](docs/capturas/02-mvn-test-unitarias.png)
-
-### 3. Pruebas de Integración con H2 y Spring Context
-Demuestra la ejecución de `@DataJpaTest` sobre la persistencia H2 y `@SpringBootTest` con `@MockBean` sobre el contexto completo de Spring.
-![Pruebas de integracion](docs/capturas/03-mvn-test-integracion.png)
-
-### 4. Verificación Completa y Análisis JaCoCo (`mvn verify`)
-Demuestra la ejecución total de las 8 pruebas automatizadas, empaquetado del artefacto JAR ejecutable y recolección de métricas de cobertura.
-![Verificación completa](docs/capturas/04-mvn-verify-total.png)
-
-### 5. Reporte de Cobertura de Código JaCoCo
-Demuestra el 100% de cobertura en instrucciones y ramas sobre la lógica central del servicio `CitaReminderServiceImpl`.
+### Reporte de cobertura JaCoCo — `target/site/jacoco/index.html`
 ![Reporte JaCoCo](docs/capturas/05-jacoco-coverage-report.png)
 
-### 6. Historial de Commits de Git
-Demuestra la secuencia incremental y descriptiva de commits estructurados bajo la especificación Conventional Commits.
-![Historial Git](docs/capturas/06-git-log-commits.png)
+### Cobertura del paquete `service` — `CitaReminderServiceImpl` al 100 %
+![JaCoCo paquete service](docs/capturas/05b-jacoco-service.png)
 
-### 7. Configuración del Pipeline de Integración Continua
-Demuestra el archivo `.github/workflows/ci.yml` configurado con JDK 21 Temurin y ejecución desatendida de `mvn -B verify`.
-![Workflow GitHub Actions](docs/capturas/07-github-actions-workflow.png)
+### Pipeline de GitHub Actions con estado "Success"
+![GitHub Actions Success](docs/capturas/07-github-actions-success.png)
 
----
+### Badge del workflow en verde
+![Badge CI en verde](docs/capturas/08-badge-ci-verde.png)
+
+### Historial de commits (Parte 1 y Parte 2)
+![git log](docs/capturas/06-git-log-commits.png)
+
+## Herramientas utilizadas
+
+| Herramienta | Versión | Uso |
+|---|---|---|
+| Java (OpenJDK / Temurin) | 21 LTS | Lenguaje y runtime |
+| Spring Boot | 3.3.5 | Framework base (Web, Data JPA, Test) |
+| Spring Data JPA / Hibernate | Gestionado por Boot 3.3.5 | Persistencia y consulta derivada |
+| H2 Database | Gestionado por Boot 3.3.5 | Base en memoria para ejecución y pruebas |
+| Lombok | Gestionado por Boot 3.3.5 | `@Data`, `@NoArgsConstructor`, `@AllArgsConstructor` en `Cita` |
+| JUnit 5 (Jupiter) | Incluido en `spring-boot-starter-test` | Motor de pruebas |
+| Mockito 5 | Incluido en `spring-boot-starter-test` | `@Mock`, `ArgumentCaptor`, `@MockBean` |
+| JaCoCo Maven Plugin | 0.8.12 | Cobertura de código |
+| Apache Maven / Maven Wrapper | 3.9.x | Construcción y ciclo de vida |
+| GitHub Actions | `actions/checkout@v4`, `actions/setup-java@v4` | Integración continua |
+| Git y GitHub | — | Control de versiones y alojamiento |
 
 ## Conclusiones
 
-1. **La testabilidad es una consecuencia directa del diseño desacoplado**: La imposibilidad inicial de testear `enviarRecordatorioUrgente()` no radicaba en las limitaciones de JUnit ni de Mockito, sino en la violación del Principio de Inversión de Dependencias al usar el operador `new` dentro de la lógica del servicio. Al trasladar la instanciación al Composition Root de Spring, la clase adquirió puntos de sustitución limpios sin alterar su comportamiento externo.
-2. **Los Test Doubles deben elegirse según la intención de la prueba**: No todas las dependencias deben convertirse en Mocks indiscriminadamente. `Clock.fixed(...)` demuestra que cuando existe una implementación estándar completa, inmutable y determinista provista por el propio lenguaje, utilizar un **Fake** resulta infinitamente superior en legibilidad, estabilidad y fidelidad frente a un mock dinámico.
-3. **Sinergia entre Strategy y Factory Method**: El patrón Strategy segregó el protocolo de transporte de cada canal, mientras que Factory Method encapsuló la regla de selección según la preferencia del paciente. Esta combinación permitió verificar la orquestación del negocio mediante aserciones claras de interacción sin acoplar la prueba a clientes SMTP o HTTP.
-4. **Pruebas de integración balanceadas y pipelines rápidos**: Al utilizar H2 en memoria como Fake de persistencia junto con `@MockBean` para servicios de mensajería externos, se logró validar la interacción real con JPA y SQL sin incurrir en costos de proveedores de telecomunicaciones ni ralentizar el pipeline de CI con contenedores pesados.
+Este laboratorio confirma que la testabilidad no se agrega al final: depende de las decisiones de diseño. Strategy y Factory Method convirtieron el envío y la selección de canal en interacciones con interfaces propias. Por eso `CitaReminderServiceImplTest` verifica toda la orquestación con mocks, sin tocar SMTP, HTTP ni base de datos. El caso de `enviarRecordatorioUrgente` lo demostró por contraste: con el `new` dentro del método, el fallo del gateway era imposible de probar. Al mover esa construcción al composition root e inyectar la abstracción, la misma lógica se volvió verificable sin cambiar su comportamiento.
+
+Elegir bien el Test Double también es una decisión de diseño. Los mocks se justifican cuando hay que verificar interacciones (`save`, `obtenerCanal`, `enviar`), mientras que un Fake real como `Clock.fixed(...)` o H2 es preferible cuando existe una implementación fiel y barata. Combinar H2 en memoria con `@MockBean` en la frontera externa produjo pruebas de integración deterministas y un pipeline de CI sin contenedores, rápido y reproducible.
