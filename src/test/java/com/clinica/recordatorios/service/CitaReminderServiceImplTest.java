@@ -67,6 +67,7 @@ class CitaReminderServiceImplTest {
 
         assertEquals(1, enviados);
         verify(reminderChannelMock, times(1)).enviar(eq(cita), anyString());
+        verify(reminderChannelFactory).obtenerCanal(CanalNotificacion.EMAIL);
         verify(citaRepository, times(1)).save(cita);
         assertTrue(cita.isRecordatorioEnviado());
     }
@@ -130,6 +131,7 @@ class CitaReminderServiceImplTest {
                 () -> citaReminderService.enviarRecordatorioUrgente(6L));
 
         verify(citaRepository, never()).save(any());
+        assertFalse(cita.isRecordatorioEnviado());
     }
 
     @Test
