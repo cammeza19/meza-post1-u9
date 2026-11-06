@@ -1,6 +1,6 @@
 # Recordatorios Citas Service
 
-![CI](https://github.com/cammeza19/meza-post1-u9/actions/workflows/ci.yml/badge.svg)
+[![CI — Pruebas y Cobertura](https://github.com/cammeza19/meza-post1-u9/actions/workflows/ci.yml/badge.svg)](https://github.com/cammeza19/meza-post1-u9/actions/workflows/ci.yml)
 
 > Post-contenido Unidad 9 — Probar el Diseño: JUnit 5, Mockito, Test Doubles e Integración Continua  
 > Patrones de Diseño de Software · Ingeniería de Sistemas · Universidad de Santander (UDES) · Sexto semestre  
@@ -146,7 +146,7 @@ Gracias a Strategy y Factory, la prueba nunca toca SMTP, HTTP ni base de datos: 
 
 ## Decisiones de diseño
 
-> Las decisiones se amplían en los ADR de `docs/adr/`.
+> Las decisiones se amplían en los ADR de [`docs/adr/`](docs/adr/).
 
 ### 1. Por qué Strategy facilitó las pruebas
 
@@ -314,7 +314,7 @@ mvn test -Dtest=CitaReminderServiceImplTest   # solo las 6 pruebas unitarias con
 mvn test -Dtest=CitaRepositoryTest            # solo la capa de persistencia
 ```
 
-En Windows se puede usar `.\mvnw.cmd` y en Linux/macOS `./mvnw` en lugar de `mvn`. Hay más detalle en `docs/guia-pruebas.md`.
+En Windows se puede usar `.\mvnw.cmd` y en Linux/macOS `./mvnw` en lugar de `mvn`. Hay más detalle en [`docs/guia-pruebas.md`](docs/guia-pruebas.md).
 
 ## Evidencias
 
