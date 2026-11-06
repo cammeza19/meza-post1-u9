@@ -336,6 +336,9 @@ En Windows se puede usar `.\mvnw.cmd` y en Linux/macOS `./mvnw` en lugar de `mvn
 ### Pipeline de GitHub Actions con estado "Success"
 ![GitHub Actions Success](docs/capturas/07-github-actions-success.png)
 
+### Log del job `build-and-test` en GitHub Actions — 8 pruebas en verde
+![Log del job en Actions](docs/capturas/07b-github-actions-job-log.png)
+
 ### Badge del workflow en verde
 ![Badge CI en verde](docs/capturas/08-badge-ci-verde.png)
 
